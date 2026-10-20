@@ -1,0 +1,146 @@
+const Network = require("./network");
+const QuorumEngine = require("./quorum");
+
+class Simulator {
+
+    constructor(
+    nodes,
+    customQuorumEngine = null,
+    approvedValidators = nodes.map(node => node.id)
+) {
+    this.nodes = nodes;
+
+    this.network = new Network();
+
+    this.quorum =
+        customQuorumEngine ||
+        new QuorumEngine(nodes.length);
+
+    this.approvedValidators = new Set(approvedValidators);
+}
+
+    runConsensus(value) {
+
+        console.log(
+            "\n===================="
+        );
+
+        console.log(
+            `Proposal: ${value}`
+        );
+
+        console.log(
+            "===================="
+        );
+
+        const votes = [];
+
+/*
+ * Request votes only from approved validators.
+ */
+        for (const node of this.nodes) {
+
+            const vote = node.vote(value);
+
+            if (!this.approvedValidators.has(vote.nodeId)) {
+                console.log(
+                    `REJECTED: Unapproved validator ${vote.nodeId}`
+                );
+                continue;
+            }
+
+            votes.push(vote);
+
+             console.log(
+                 `${vote.nodeId} voted ${vote.value}`
+            );
+        }
+
+        /*
+         * Count votes
+         */
+        const tally = {};
+
+        for (const vote of votes) {
+
+            tally[vote.value] =
+                (tally[vote.value] || 0) + 1;
+        }
+
+        console.log("\nVote Tally");
+
+        console.table(tally);
+
+        console.log(
+            `Required Quorum = ${this.quorum.size()}`
+        );
+
+        /*
+         * Find all values that
+         * satisfy quorum.
+         */
+        const winners = [];
+
+        for (const candidate in tally) {
+
+            const voteCount =
+                tally[candidate];
+
+            if (
+                this.quorum.reached(
+                    voteCount
+                )
+            ) {
+                winners.push({
+                    value: candidate,
+                    votes: voteCount
+                });
+            }
+        }
+
+        /*
+         * Decision
+         */
+        if (
+            winners.length === 0
+        ) {
+
+            console.log(
+                "\nNO CONSENSUS"
+            );
+
+        }
+        else if (
+            winners.length === 1
+        ) {
+
+            console.log(
+                `\nCOMMITTED: ${winners[0].value}`
+            );
+
+        }
+        else {
+
+            console.log(
+                "\nSAFETY VIOLATION!"
+            );
+
+            console.log(
+                "Multiple values reached quorum:"
+            );
+
+            console.table(winners);
+        }
+
+        return {
+
+            proposal: value,
+            votes,
+            tally,
+            winners
+
+        };
+    }
+}
+
+module.exports = Simulator;
